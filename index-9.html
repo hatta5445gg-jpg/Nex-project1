@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="id"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fff"><title>NEX PIXEL</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#fff;color:#171717;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.topbar{height:58px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #e7e7e7}
+.tabs{display:flex;gap:4px;padding:4px;border:1px solid #e7e7e7;border-radius:12px;background:#fafafa}
+.tab{border:0;background:transparent;padding:10px 22px;border-radius:8px;font-size:14px;cursor:pointer;color:#666}
+.tab[aria-selected=true]{background:#171717;color:white}.panel{display:none}.panel.active{display:block}
+#canvasViewport{height:calc(100dvh - 59px);width:100%;overflow:auto;background:white}
+#board{width:1000px;height:1000px;position:relative;background:white;overflow:hidden}
+#board img{position:absolute;display:block;object-fit:fill;user-select:none}
+#adminPanel{max-width:560px;margin:24px auto;padding:20px}h1{font-size:21px;font-weight:650;margin:0 0 8px}
+p{color:#777;font-size:14px;line-height:1.55;margin:0 0 20px}.field{display:flex;flex-direction:column;gap:7px;margin:15px 0}
+label{font-size:13px;font-weight:600}input,button.action{font:inherit;border:1px solid #ddd;border-radius:10px;padding:12px;background:white;color:#171717}
+button.action{cursor:pointer;font-size:14px;font-weight:600}button.primary{background:#171717;color:white;border-color:#171717}
+button:disabled{opacity:.45;cursor:not-allowed}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.note{font-size:12px;color:#777;margin-top:12px}#adminTools{display:none}#adminTools.visible{display:block}
+#pinArea{max-width:360px;margin:40px auto;padding:20px}#status{min-height:20px;font-size:13px;color:#555;margin-top:12px}
+#preview{display:none;max-width:160px;max-height:100px;object-fit:contain;border:1px solid #eee;border-radius:8px;padding:4px}
+@media(max-width:600px){#adminPanel{margin:12px auto;padding:18px}}
+</style></head><body>
+<header class="topbar"><nav class="tabs" aria-label="Navigasi">
+<button class="tab" id="tabCanvas" aria-selected="true" type="button">Canvas</button>
+<button class="tab" id="tabAdmin" aria-selected="false" type="button">Upload Logo</button>
+</nav></header>
+<main>
+<section id="canvasPanel" class="panel active" aria-label="Canvas kosong"><div id="canvasViewport"><div id="board"></div></div></section>
+<section id="adminPanel" class="panel">
+<div id="pinArea"><h1>Akses Admin</h1><p>Masukkan PIN untuk membuka ruang unggah logo.</p>
+<form id="pinForm"><div class="field"><label for="pin">PIN Admin</label><input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="current-password" placeholder="Masukkan PIN" required></div>
+<button class="action primary" type="submit">Buka akses</button><div id="pinStatus" role="status" class="note"></div></form></div>
+<div id="adminTools"><h1>Ruang Upload Logo</h1><p>Pilih gambar, atur posisi dan ukuran, lalu simpan ke canvas.</p>
+<div class="field"><label for="logoFile">File logo (PNG, JPG, WEBP)</label><input id="logoFile" type="file" accept="image/png,image/jpeg,image/webp"></div>
+<img id="preview" alt="Pratinjau logo">
+<div class="row"><div class="field"><label for="posX">Posisi X (0–999)</label><input id="posX" type="number" min="0" max="999" value="0" required></div>
+<div class="field"><label for="posY">Posisi Y (0–999)</label><input id="posY" type="number" min="0" max="999" value="0" required></div></div>
+<div class="row"><div class="field"><label for="logoW">Lebar (1–1000 px)</label><input id="logoW" type="number" min="1" max="1000" value="100" required></div>
+<div class="field"><label for="logoH">Tinggi (1–1000 px)</label><input id="logoH" type="number" min="1" max="1000" value="100" required></div></div>
+<div class="field"><label for="logoAlt">Nama logo (opsional)</label><input id="logoAlt" type="text" maxlength="80" placeholder="Nama logo"></div>
+<button class="action primary" id="saveLogo" type="button" disabled>Simpan ke canvas</button>
+<button class="action" id="clearLogo" type="button">Hapus semua logo</button>
+<button class="action" id="lockAdmin" type="button">Kunci ruang admin</button>
+<div id="status" role="status"></div>
+<div class="note">Canvas berukuran 1000 × 1000 piksel. Data disimpan di browser perangkat ini. PIN pada versi HTML ini hanya pengunci antarmuka, bukan keamanan server.</div>
+</div></section></main>
+<script>
+(()=> {
+const PIN="7744", DB_NAME="nex-pixel-db", STORE="logos";
+const board=document.getElementById("board"), canvasPanel=document.getElementById("canvasPanel"), adminPanel=document.getElementById("adminPanel");
+const tabCanvas=document.getElementById("tabCanvas"), tabAdmin=document.getElementById("tabAdmin"), pinArea=document.getElementById("pinArea"), adminTools=document.getElementById("adminTools");
+const pinForm=document.getElementById("pinForm"), pin=document.getElementById("pin"), pinStatus=document.getElementById("pinStatus");
+const logoFile=document.getElementById("logoFile"), preview=document.getElementById("preview"), saveBtn=document.getElementById("saveLogo"), status=document.getElementById("status");
+let selectedDataUrl="", db;
+function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE,{keyPath:"id",autoIncrement:true})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+function allLogos(){return new Promise((resolve,reject)=>{const r=db.transaction(STORE,"readonly").objectStore(STORE).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error)})}
+function saveRecord(v){return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).add(v);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+function clearRecords(){return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).clear();tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+function render(items){board.replaceChildren();for(const v of items){const img=document.createElement("img");img.src=v.dataUrl;img.alt=v.name||"";img.title=v.name||"";img.style.left=v.x+"px";img.style.top=v.y+"px";img.style.width=v.w+"px";img.style.height=v.h+"px";board.appendChild(img)}}
+async function refresh(){render(await allLogos())}
+function showTab(which){const c=which==="canvas";canvasPanel.classList.toggle("active",c);adminPanel.classList.toggle("active",!c);tabCanvas.setAttribute("aria-selected",String(c));tabAdmin.setAttribute("aria-selected",String(!c))}
+tabCanvas.onclick=()=>showTab("canvas");tabAdmin.onclick=()=>{showTab("admin");pin.focus()};
+pinForm.onsubmit=e=>{e.preventDefault();if(pin.value===PIN){pinArea.style.display="none";adminTools.classList.add("visible");pinStatus.textContent="";pin.value="";status.textContent="Akses admin terbuka."}else{pinStatus.textContent="PIN tidak sesuai.";pin.value="";pin.focus()}};
+logoFile.onchange=()=>{const f=logoFile.files&&logoFile.files[0];if(!f){selectedDataUrl="";saveBtn.disabled=true;preview.style.display="none";return}
+if(!["image/png","image/jpeg","image/webp"].includes(f.type)){status.textContent="Pilih file PNG, JPG, atau WEBP.";logoFile.value="";return}
+if(f.size>5*1024*1024){status.textContent="Ukuran gambar maksimal 5 MB.";logoFile.value="";return}
+const r=new FileReader();r.onload=()=>{selectedDataUrl=String(r.result||"");preview.src=selectedDataUrl;preview.style.display="block";saveBtn.disabled=false;status.textContent="Logo siap disimpan."};r.onerror=()=>status.textContent="Gagal membaca file gambar.";r.readAsDataURL(f)};
+saveBtn.onclick=async()=>{if(!selectedDataUrl||!db)return;const x=Number(document.getElementById("posX").value),y=Number(document.getElementById("posY").value),w=Number(document.getElementById("logoW").value),h=Number(document.getElementById("logoH").value);
+if(![x,y,w,h].every(Number.isInteger)||x<0||y<0||w<1||h<1||x+w>1000||y+h>1000){status.textContent="Posisi atau ukuran di luar batas canvas 1000 × 1000.";return}
+saveBtn.disabled=true;try{await saveRecord({dataUrl:selectedDataUrl,x,y,w,h,name:document.getElementById("logoAlt").value.trim()});await refresh();status.textContent="Logo tersimpan di browser ini.";logoFile.value="";selectedDataUrl="";preview.style.display="none"}catch(e){status.textContent="Gagal menyimpan. Coba gambar lebih kecil atau hapus beberapa logo."}finally{saveBtn.disabled=false}};
+document.getElementById("clearLogo").onclick=async()=>{if(!confirm("Hapus semua logo dari canvas pada browser ini?"))return;try{await clearRecords();await refresh();status.textContent="Semua logo telah dihapus."}catch(e){status.textContent="Gagal menghapus logo."}};
+document.getElementById("lockAdmin").onclick=()=>{adminTools.classList.remove("visible");pinArea.style.display="block";pinStatus.textContent="";status.textContent="";showTab("canvas")};
+openDB().then(async v=>{db=v;await refresh()}).catch(()=>{status.textContent="Penyimpanan browser tidak tersedia."});
+})();
+</script></body></html>
